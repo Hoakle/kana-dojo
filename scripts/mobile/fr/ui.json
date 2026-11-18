@@ -31,6 +31,14 @@
     [
       "^Blitz: (.+)$",
       "Blitz : $1"
+    ],
+    [
+      "^Play pronunciation: (.+)$",
+      "Écouter : $1"
+    ],
+    [
+      "^Stop pronunciation: (.+)$",
+      "Arrêter : $1"
     ]
   ],
   "Start Learning": "Commencer",

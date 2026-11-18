@@ -109,6 +109,25 @@ edit('app/layout.tsx', s =>
       'const isAdSenseEnabled = false;',
     ),
 );
+// Japanese pronunciation: speechSynthesis polyfill on top of the native
+// Android TextToSpeech bridge. MainActivity inlines it at the top of <head>.
+fs.copyFileSync(p('scripts/mobile/android-tts.js'), p('public/android-tts.js'));
+// The upstream audio button is switched off (renders null): turn it back on.
+edit('shared/ui-composite/audio/SSRAudioButton.tsx', s =>
+  s
+    .replace(
+      "import { useAudioPreferences } from '@/features/Preferences';",
+      "import { useAudioPreferences } from '@/features/Preferences';\nimport AudioButton from './AudioButton';",
+    )
+    .replace(
+      'const SSRAudioButton: React.FC<SSRAudioButtonProps> = _props => {',
+      'const SSRAudioButton: React.FC<SSRAudioButtonProps> = props => {',
+    )
+    .replace(
+      /\/\/ TODO: Re-enable[^\n]*\n\s*return null;/,
+      'return <AudioButton {...props} />;',
+    ),
+);
 
 // 5. No service worker: assets are already local inside the APK.
 fs.writeFileSync(

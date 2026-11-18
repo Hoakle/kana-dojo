@@ -12,8 +12,10 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -58,6 +60,7 @@ public class MainActivity extends Activity {
     }
 
     private WebView webView;
+    private AndroidTts androidTts;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -74,6 +77,10 @@ public class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
+
+        // Japanese pronunciation: native TextToSpeech exposed to the page.
+        androidTts = new AndroidTts(this, webView);
+        webView.addJavascriptInterface(androidTts, "AndroidTTS");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -139,6 +146,9 @@ public class MainActivity extends Activity {
         for (String candidate : candidates) {
             try {
                 InputStream in = getAssets().open(ASSET_ROOT + candidate);
+                if (candidate.endsWith(".html")) {
+                    in = injectHeadScript(in);
+                }
                 WebResourceResponse response = new WebResourceResponse(mimeType(candidate), "UTF-8", in);
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Cache-Control", "no-cache");
@@ -165,6 +175,37 @@ public class MainActivity extends Activity {
         return notFound;
     }
 
+    private String ttsPolyfill;
+
+    /**
+     * Inlines android-tts.js (Web Speech API polyfill, see AndroidTts) as the
+     * very first script of each page so it runs before the app.
+     */
+    private InputStream injectHeadScript(InputStream in) throws IOException {
+        if (ttsPolyfill == null) {
+            ttsPolyfill = new String(readAll(getAssets().open(ASSET_ROOT + "/android-tts.js")),
+                    StandardCharsets.UTF_8);
+        }
+        String html = new String(readAll(in), StandardCharsets.UTF_8);
+        int head = html.indexOf("<head>");
+        if (head >= 0) {
+            int at = head + "<head>".length();
+            html = html.substring(0, at) + "<script>" + ttsPolyfill + "</script>" + html.substring(at);
+        }
+        return new ByteArrayInputStream(html.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static byte[] readAll(InputStream in) throws IOException {
+        try (InputStream input = in; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[16384];
+            int n;
+            while ((n = input.read(buffer)) != -1) {
+                out.write(buffer, 0, n);
+            }
+            return out.toByteArray();
+        }
+    }
+
     private static String mimeType(String path) {
         int dot = path.lastIndexOf('.');
         String ext = dot >= 0 ? path.substring(dot + 1).toLowerCase() : "";
@@ -176,6 +217,14 @@ public class MainActivity extends Activity {
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         webView.saveState(outState);
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (androidTts != null) {
+            androidTts.shutdown();
+        }
+        super.onDestroy();
     }
 
     @Override
