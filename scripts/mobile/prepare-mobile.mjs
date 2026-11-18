@@ -134,7 +134,74 @@ edit('shared/ui-composite/Game/TransitionAdvertisementOverlay.tsx', s =>
   ),
 );
 
-// 7. Static export config.
+// 7. French meanings for kanji and vocabulary (scripts/mobile/fr/*.tsv).
+//    kanji-*.tsv:  <kanji>\t<meaning; meaning; ...>
+//    vocab-*.tsv:  <jmdict_seq>\t<meaning; ...>  or  <word>|<jmdict_seq>\t...
+//    Entries without a translation keep their English meaning.
+const frDir = p('scripts/mobile/fr');
+const kanjiFr = new Map();
+const vocabFr = new Map();
+for (const file of fs.existsSync(frDir) ? fs.readdirSync(frDir) : []) {
+  if (!file.endsWith('.tsv')) continue;
+  const target = file.startsWith('kanji') ? kanjiFr : vocabFr;
+  for (const line of fs.readFileSync(path.join(frDir, file), 'utf8').split('\n')) {
+    const [key, value] = line.split('\t');
+    if (key && value?.trim()) target.set(key.trim(), value.trim());
+  }
+}
+const splitMeanings = value =>
+  value
+    .split(';')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+let kanjiCount = 0;
+for (const file of fs.readdirSync(p('public/data-kanji'))) {
+  if (!/^N\d\.json$/.test(file)) continue;
+  const rel = `public/data-kanji/${file}`;
+  const data = JSON.parse(fs.readFileSync(p(rel), 'utf8'));
+  for (const entry of data) {
+    const fr = kanjiFr.get(entry.kanjiChar);
+    if (fr) {
+      entry.meanings = splitMeanings(fr);
+      kanjiCount++;
+    }
+  }
+  fs.writeFileSync(p(rel), JSON.stringify(data));
+}
+
+let vocabCount = 0;
+for (const file of fs.readdirSync(p('public/data-vocab'))) {
+  if (!/^n\d\.json$/.test(file)) continue;
+  const rel = `public/data-vocab/${file}`;
+  const data = JSON.parse(fs.readFileSync(p(rel), 'utf8'));
+  for (const entry of data) {
+    const word = entry.kanji || entry.kana;
+    const fr =
+      vocabFr.get(`${word}|${entry.jmdict_seq}`) ?? vocabFr.get(entry.jmdict_seq);
+    if (fr) {
+      // The app splits definitions on "," and ";".
+      entry.waller_definition = splitMeanings(fr.replace(/,/g, ';')).join('; ');
+      vocabCount++;
+    }
+  }
+  fs.writeFileSync(p(rel), JSON.stringify(data));
+}
+console.log(`prepare-mobile: French meanings for ${kanjiCount} kanji, ${vocabCount} words.`);
+
+// Typed answers: ignore accents and optional French articles.
+edit('shared/utils/meanings.ts', s =>
+  s.replace(
+    ".replace(OPTIONAL_MEANING_PREFIX, '');",
+    `.replace(OPTIONAL_MEANING_PREFIX, '')
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[’]/g, "'")
+    .replace(/^(?:l'|(?:le|la|les|un|une|des|du|de la)\\s+)/, '');`,
+  ),
+);
+
+// 8. Static export config.
 fs.writeFileSync(
   p('next.config.ts'),
   `import type { NextConfig } from 'next';
