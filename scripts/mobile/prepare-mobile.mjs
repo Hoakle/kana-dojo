@@ -201,7 +201,39 @@ edit('shared/utils/meanings.ts', s =>
   ),
 );
 
-// 8. Static export config.
+// 8. Keep only a few Japanese fonts: each Google JP font adds ~2-3 MB of
+//    font files to the APK (all 36 fonts weigh ~90 MB).
+function keepFonts(rel, keep) {
+  edit(rel, s => {
+    const removed = new Set();
+    let out = s.replace(
+      /\n\s*\{\s*name: '([^']+)',\s*font: (\w+),\s*\},?/g,
+      (block, name, varName) => {
+        if (keep.includes(name)) return block;
+        removed.add(varName);
+        return '';
+      },
+    );
+    out = out.replace(
+      /\nconst (\w+) = \w+\(\{[\s\S]*?\}\);(?=\n)/g,
+      (block, varName) => (removed.has(varName) ? '' : block),
+    );
+    return out;
+  });
+}
+keepFonts('features/Preferences/data/fonts/fonts.prod.ts', [
+  'Zen Maru Gothic',
+  'Noto Sans JP',
+  'Klee One',
+  'M PLUS Rounded 1c',
+  'Shippori Mincho',
+]);
+keepFonts('shared/ui-composite/Decorations/decorationFonts.prod.ts', [
+  'Zen Maru Gothic',
+  'Klee One',
+]);
+
+// 9. Static export config.
 fs.writeFileSync(
   p('next.config.ts'),
   `import type { NextConfig } from 'next';
