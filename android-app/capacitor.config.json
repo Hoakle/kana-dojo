@@ -1,0 +1,13 @@
+{
+  "appId": "com.kanadojo.app",
+  "appName": "KanaDojo",
+  "webDir": "www",
+  "server": {
+    "url": "https://kanadojo.com",
+    "androidScheme": "https",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}
