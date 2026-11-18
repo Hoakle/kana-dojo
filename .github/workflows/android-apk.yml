@@ -8,7 +8,15 @@ on:
       - 'claude/**'
     paths:
       - 'android-app/**'
-      - 'public/icons/**'
+      - 'scripts/mobile/**'
+      - 'app/**'
+      - 'core/**'
+      - 'features/**'
+      - 'shared/**'
+      - 'widgets/**'
+      - 'entities/**'
+      - 'public/**'
+      - 'package-lock.json'
       - '.github/workflows/android-apk.yml'
 
 permissions:
@@ -21,9 +29,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: android-app
     steps:
       - uses: actions/checkout@v5
 
@@ -31,28 +36,28 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: android-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Build offline French site
+        run: ./scripts/mobile/build-mobile.sh
 
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
 
-      - name: Install dependencies
-        run: npm ci
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
 
-      - name: Generate Android project and icons
+      - name: Build APK
+        working-directory: android-app
         run: |
-          npx cap add android
-          npm run icons
-          npx cap sync android
-
-      - name: Build debug APK
-        working-directory: android-app/android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-          cp app/build/outputs/apk/debug/app-debug.apk ../KanaDojo.apk
+          gradle assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk KanaDojo.apk
+          ls -lh KanaDojo.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -61,13 +66,14 @@ jobs:
           path: android-app/KanaDojo.apk
 
       - name: Publish APK to the "android-latest" release
+        working-directory: android-app
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG=android-latest
           gh release delete "$TAG" --yes --cleanup-tag || true
           gh release create "$TAG" KanaDojo.apk \
-            --title "KanaDojo Android (latest build)" \
-            --notes "APK built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}. Download KanaDojo.apk on your phone and open it to install (allow installs from unknown sources)." \
+            --title "KanaDojo Android (hors ligne, français)" \
+            --notes "APK built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}. Works offline. Download KanaDojo.apk on your phone and open it to install." \
             --target "$GITHUB_SHA" \
             --prerelease

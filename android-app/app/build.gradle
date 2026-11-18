@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application'
+}
+
+def runNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+
+android {
+    namespace 'com.kanadojo.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.kanadojo.app'
+        minSdk 24
+        targetSdk 35
+        versionCode runNumber
+        versionName "1.0.${runNumber}"
+    }
+
+    // Fixed key so each new APK installs over the previous one (keeps progress).
+    // This is a personal side-loading key, not a Play Store upload key.
+    signingConfigs {
+        kanadojo {
+            storeFile file('keystore/kanadojo.keystore')
+            storePassword 'kanadojo'
+            keyAlias 'kanadojo'
+            keyPassword 'kanadojo'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.kanadojo
+        }
+        debug {
+            signingConfig signingConfigs.kanadojo
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    androidResources {
+        // The default pattern drops folders starting with "_" (like Next.js "_next").
+        ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
+        // Fonts, audio and images are already compressed.
+        noCompress 'woff2', 'woff', 'ttf', 'otf', 'opus', 'mp3', 'ogg', 'wav', 'png', 'jpg', 'webp', 'avif'
+    }
+}

@@ -1,37 +1,40 @@
-# KanaDojo Android (APK)
+# KanaDojo Android (offline APK)
 
-Android wrapper built with [Capacitor](https://capacitorjs.com). The app opens
-https://kanadojo.com full screen in a native WebView. Your progress is stored
-on the phone (same as in the browser), and an internet connection is required.
+Native Android app (plain WebView, no framework) that bundles a static,
+French-only export of KanaDojo. It works without an internet connection;
+progress is stored on the phone.
 
-## Get the APK
+## How it is built
 
-Every push that touches `android-app/` runs the **Build Android APK** GitHub
-Actions workflow (`.github/workflows/android-apk.yml`). It:
+`.github/workflows/android-apk.yml` runs on every push that touches the app:
 
-- uploads `KanaDojo.apk` as a workflow artifact, and
-- publishes it to the `android-latest` release (Releases page of the repo).
+1. `scripts/mobile/build-mobile.sh`
+   - `prepare-mobile.mjs` removes server-only code (API routes, middleware,
+     Sentry, ads, analytics), forces the `fr` locale and switches Next.js to
+     `output: 'export'`;
+   - `next build` produces the static site in `out/`;
+   - `flatten-export.mjs` moves `out/fr/**` to `out/` so URLs match the links;
+   - the site is copied to `android-app/app/src/main/assets/www`.
+2. `gradle assembleRelease` builds `KanaDojo.apk`, published to the
+   `android-latest` release and as a workflow artifact.
 
-On your phone, open the release page, download `KanaDojo.apk` and open it.
-Android will ask you to allow installs from this source the first time.
+`MainActivity` serves the assets from `https://appassets.androidplatform.net/`
+and maps `/kana` to `kana.html` (and `?_rsc` requests to `kana.txt`), like a
+static host would.
 
 ## Build locally
 
-Requires Node 20+, JDK 21 and the Android SDK (`ANDROID_HOME` set).
+The build scripts modify the working tree: run them on a throwaway copy.
+Requires Node 22, JDK 17+, Gradle 8.11 and the Android SDK.
 
 ```bash
-cd android-app
-npm ci
-npx cap add android
-npm run icons
-npx cap sync android
-cd android && ./gradlew assembleDebug
+npm ci --ignore-scripts
+./scripts/mobile/build-mobile.sh
+cd android-app && gradle assembleRelease
 ```
 
-The APK is at `android/app/build/outputs/apk/debug/app-debug.apk`.
+## Signing
 
-## Config
-
-- `capacitor.config.json`: app id, name and the site URL (`server.url`).
-- `assets/icon.png`, `assets/splash.png`: source images for launcher icon and splash.
-- `www/index.html`: fallback page shown if the site can't load.
+`app/keystore/kanadojo.keystore` is a personal side-loading key committed on
+purpose, so each new APK installs over the previous one without losing
+progress. Do not use it for a store release.

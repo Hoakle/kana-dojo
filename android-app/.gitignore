@@ -1,2 +1,6 @@
-node_modules/
-android/
+.gradle/
+build/
+app/build/
+local.properties
+# Static site copied in by scripts/mobile/build-mobile.sh
+app/src/main/assets/
