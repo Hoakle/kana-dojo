@@ -1,0 +1,116 @@
+'use client';
+
+// Mobile (offline APK) build only, copied by scripts/mobile/prepare-mobile.mjs.
+// Translates hard-coded English UI strings to French after hydration, using a
+// dictionary of exact strings (+ a few regex patterns). Text nodes and the
+// placeholder / aria-label / title attributes are updated in place.
+import { useEffect } from 'react';
+import dictionary from './MobileTranslator.fr.json';
+
+type Dict = Record<string, unknown> & { __patterns?: [string, string][] };
+
+const dict = dictionary as Dict;
+const exact = new Map<string, string>();
+const lower = new Map<string, string>();
+for (const [key, value] of Object.entries(dict)) {
+  if (key === '__patterns' || typeof value !== 'string') continue;
+  exact.set(key, value);
+  if (!lower.has(key.toLowerCase())) lower.set(key.toLowerCase(), value);
+}
+const patterns = (dict.__patterns ?? []).map(
+  ([re, out]) => [new RegExp(re), out] as const,
+);
+
+const ATTRS = ['placeholder', 'aria-label', 'title'];
+const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'CODE']);
+
+function translate(text: string): string | null {
+  const trimmed = text.replace(/\s+/g, ' ').trim();
+  if (!trimmed || !/[A-Za-z]/.test(trimmed)) return null;
+  let out = exact.get(trimmed);
+  // Case-insensitive fallback only for longer strings: short ones may be
+  // romaji (no, to, ha...) shown in the lessons.
+  if (out === undefined && trimmed.length >= 4) {
+    const viaLower = lower.get(trimmed.toLowerCase());
+    if (viaLower !== undefined) {
+      if (trimmed === trimmed.toLowerCase()) out = viaLower.toLowerCase();
+      else if (trimmed === trimmed.toUpperCase()) out = viaLower.toUpperCase();
+      else out = viaLower.charAt(0).toUpperCase() + viaLower.slice(1);
+    }
+  }
+  if (out === undefined) {
+    for (const [re, replacement] of patterns) {
+      if (re.test(trimmed)) {
+        out = trimmed.replace(re, replacement);
+        break;
+      }
+    }
+  }
+  if (out === undefined || out === trimmed) return null;
+  const lead = text.match(/^\s*/)?.[0] ?? '';
+  const trail = text.match(/\s*$/)?.[0] ?? '';
+  return lead + out + trail;
+}
+
+function translateTextNode(node: Text) {
+  const parent = node.parentElement;
+  if (!parent || SKIP_TAGS.has(parent.tagName) || parent.isContentEditable) {
+    return;
+  }
+  const value = node.nodeValue;
+  if (!value) return;
+  const out = translate(value);
+  if (out !== null) node.nodeValue = out;
+}
+
+function translateAttributes(el: Element) {
+  for (const attr of ATTRS) {
+    const value = el.getAttribute(attr);
+    if (!value) continue;
+    const out = translate(value);
+    if (out !== null) el.setAttribute(attr, out);
+  }
+}
+
+function translateTree(root: Node) {
+  if (root.nodeType === Node.TEXT_NODE) {
+    translateTextNode(root as Text);
+    return;
+  }
+  if (root.nodeType !== Node.ELEMENT_NODE) return;
+  const el = root as Element;
+  if (SKIP_TAGS.has(el.tagName)) return;
+  translateAttributes(el);
+  const walker = document.createTreeWalker(
+    el,
+    NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+  );
+  let node = walker.nextNode();
+  while (node) {
+    if (node.nodeType === Node.TEXT_NODE) translateTextNode(node as Text);
+    else translateAttributes(node as Element);
+    node = walker.nextNode();
+  }
+}
+
+export default function MobileTranslator() {
+  useEffect(() => {
+    translateTree(document.body);
+    const observer = new MutationObserver(mutations => {
+      for (const m of mutations) {
+        if (m.type === 'characterData') translateTree(m.target);
+        else if (m.type === 'attributes') translateAttributes(m.target as Element);
+        else m.addedNodes.forEach(n => translateTree(n));
+      }
+    });
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ATTRS,
+    });
+    return () => observer.disconnect();
+  }, []);
+  return null;
+}

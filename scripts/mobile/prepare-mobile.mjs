@@ -47,17 +47,31 @@ if (!fs.existsSync(p('app', '[locale]'))) {
   'sentry.server.config.ts',
 ].forEach(rm);
 
-// 2. Remove pages that need a server or the network and are not lessons.
-[
-  'experiments',
-  'translate',
-  'academy',
-  'resources',
-  'anki-converter',
-  'demo',
-  'patch-notes',
-  'conjugate',
-].forEach(dir => rm(`app/[locale]/${dir}`));
+// 2. Remove pages that need a server (translation API, search params) and
+//    their links in the sidebar. Academy articles only exist in English and
+//    Resources (48 MB of English link pages) is only useful online.
+['translate', 'conjugate', 'academy', 'resources'].forEach(dir =>
+  rm(`app/[locale]/${dir}`),
+);
+edit('shared/ui-composite/Menu/Sidebar.tsx', s =>
+  s
+    .replace(
+      /\n\s*\{ href: '\/translate', label: 'Translate', icon: Languages \},/,
+      '',
+    )
+    .replace(
+      /\n\s*\{ href: '\/conjugate', label: 'Conjugate', icon: Repeat \},/,
+      '',
+    )
+    .replace(
+      /\n\s*\{ href: '\/academy', label: 'Guides', icon: BookOpen \},/,
+      '',
+    )
+    .replace(
+      /\n\s*\{ href: '\/resources', label: 'Resources', icon: Library \},/,
+      '',
+    ),
+);
 
 // 3. French only.
 edit('core/i18n/routing.ts', s =>
@@ -86,8 +100,14 @@ edit('app/layout.tsx', s =>
       `const locale = '${LOCALE}';`,
     )
     // No analytics or ads inside the offline app.
-    .replace(/const isAnalyticsEnabled =[^;]+;/, 'const isAnalyticsEnabled = false;')
-    .replace(/const isAdSenseEnabled =[^;]+;/, 'const isAdSenseEnabled = false;'),
+    .replace(
+      /const isAnalyticsEnabled =[^;]+;/,
+      'const isAnalyticsEnabled = false;',
+    )
+    .replace(
+      /const isAdSenseEnabled =[^;]+;/,
+      'const isAdSenseEnabled = false;',
+    ),
 );
 
 // 5. No service worker: assets are already local inside the APK.
@@ -144,7 +164,9 @@ const vocabFr = new Map();
 for (const file of fs.existsSync(frDir) ? fs.readdirSync(frDir) : []) {
   if (!file.endsWith('.tsv')) continue;
   const target = file.startsWith('kanji') ? kanjiFr : vocabFr;
-  for (const line of fs.readFileSync(path.join(frDir, file), 'utf8').split('\n')) {
+  for (const line of fs
+    .readFileSync(path.join(frDir, file), 'utf8')
+    .split('\n')) {
     const [key, value] = line.split('\t');
     if (key && value?.trim()) target.set(key.trim(), value.trim());
   }
@@ -178,7 +200,8 @@ for (const file of fs.readdirSync(p('public/data-vocab'))) {
   for (const entry of data) {
     const word = entry.kanji || entry.kana;
     const fr =
-      vocabFr.get(`${word}|${entry.jmdict_seq}`) ?? vocabFr.get(entry.jmdict_seq);
+      vocabFr.get(`${word}|${entry.jmdict_seq}`) ??
+      vocabFr.get(entry.jmdict_seq);
     if (fr) {
       // The app splits definitions on "," and ";".
       entry.waller_definition = splitMeanings(fr.replace(/,/g, ';')).join('; ');
@@ -187,7 +210,9 @@ for (const file of fs.readdirSync(p('public/data-vocab'))) {
   }
   fs.writeFileSync(p(rel), JSON.stringify(data));
 }
-console.log(`prepare-mobile: French meanings for ${kanjiCount} kanji, ${vocabCount} words.`);
+console.log(
+  `prepare-mobile: French meanings for ${kanjiCount} kanji, ${vocabCount} words.`,
+);
 
 // Typed answers: ignore accents and optional French articles.
 edit('shared/utils/meanings.ts', s =>
@@ -233,7 +258,59 @@ keepFonts('shared/ui-composite/Decorations/decorationFonts.prod.ts', [
   'Klee One',
 ]);
 
-// 9. Static export config.
+// 9. French demo questions (welcome modal "Essayez-le").
+const DEMO_FR = {
+  one: 'un',
+  two: 'deux',
+  three: 'trois',
+  big: 'grand',
+  small: 'petit',
+  mountain: 'montagne',
+  river: 'rivière',
+  sun: 'soleil',
+  moon: 'lune',
+  tree: 'arbre',
+  mouth: 'bouche',
+  person: 'personne',
+  five: 'cinq',
+  rain: 'pluie',
+  field: 'champ',
+  cat: 'chat',
+  insect: 'insecte',
+  fire: 'feu',
+  water: 'eau',
+  child: 'enfant',
+  woman: 'femme',
+};
+edit('features/Demo/components/DemoGame.tsx', s =>
+  s.replace(/meaning: '([^']+)'/g, (m, en) =>
+    DEMO_FR[en] ? `meaning: '${DEMO_FR[en].replace(/'/g, "\\'")}'` : m,
+  ),
+);
+
+// 10. French interface: translate hard-coded English UI text at display time
+//     with the dictionary in scripts/mobile/fr/ui.json.
+fs.copyFileSync(
+  p('scripts/mobile/fr/ui.json'),
+  p('shared/ui-composite/MobileTranslator.fr.json'),
+);
+fs.writeFileSync(
+  p('shared/ui-composite/MobileTranslator.tsx'),
+  fs.readFileSync(p('scripts/mobile/MobileTranslator.tsx.txt'), 'utf8'),
+);
+edit('app/[locale]/layout.tsx', s =>
+  s
+    .replace(
+      "import ClientLayout from '../ClientLayout';",
+      "import ClientLayout from '../ClientLayout';\nimport MobileTranslator from '@/shared/ui-composite/MobileTranslator';",
+    )
+    .replace(
+      '<ClientLayout>{children}</ClientLayout>',
+      '<ClientLayout>{children}</ClientLayout>\n      <MobileTranslator />',
+    ),
+);
+
+// 11. Static export config.
 fs.writeFileSync(
   p('next.config.ts'),
   `import type { NextConfig } from 'next';
