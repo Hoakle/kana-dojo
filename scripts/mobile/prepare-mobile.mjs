@@ -152,6 +152,12 @@ export default function ServiceWorkerRegistration() {
 );
 rm('public/sw.js');
 
+// 6a. No Ko-fi donation popup (opened on streak milestones and every other
+//     visit to Preferences / Progress) inside the offline app.
+edit('app/ClientLayout.tsx', s =>
+  s.replace('open={isDonationModalOpen}', 'open={false}'),
+);
+
 // 6. No ads inside the offline app.
 fs.writeFileSync(
   p('shared/ui-composite/Ads/AdSenseDisplay.tsx'),
